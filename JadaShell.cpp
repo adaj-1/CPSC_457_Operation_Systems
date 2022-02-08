@@ -8,12 +8,12 @@
 #include <fcntl.h>  //defines open(), O_RDONLY
 #include <numeric>
 #include <algorithm>
+#include<sys/wait.h>
 
 #define MAX_WORD_SIZE 80
 #define MAX_LETTER_SIZE 1000
 #define BUFFER_SIZE 1024
-#define MAX_CMDS 4
-#define MAX_REDIRECTIONS 3
+
 
 using namespace std;
 
@@ -43,63 +43,72 @@ int parser(vector<string> *parsed_args)
         parsed_args->push_back(command);
 
         if (parsed_args->front() == "q")
-            return 0;
-        else
             return 1;
+        else
+            return 0;
+    }
+}
+
+void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, vector<vector<string>> *cmds, vector<string> *redirections)
+{
+    cout << "In multi_cmd" << endl;
+    int j_start = 0;
+    int redirection_index = 0;
+
+    for (int i = 0; i < redirection_indices->size() + 1; i++)
+    {
+        vector<string> next_input;
+        vector<string> next_parsed_args;
+
+        // checks if added final redirection already
+        if (j_start != redirection_indices->back() + 1)
+        {
+            redirection_index = redirection_indices->at(i);
+            redirections->push_back(parsed_args->at(redirection_index));
+        }
+        // if already added final redirection, get final command
+        else
+        {
+            redirection_index = parsed_args->size();
+        }
+
+        for (int j = j_start; j < redirection_index; j++)
+        {
+            next_input.push_back(parsed_args->at(j));
+            // cout << "next_input: " << parsed_args->at(j) << endl;
+        }
+        cmds->push_back(next_input);
+        // cout<< "cmds front: " << cmds->at(i).front() << endl;
+        // cout << "cmds back: " << cmds->at(i).back() << endl;
+
+        j_start = redirection_index + 1;
     }
 }
 
 void check_commands(vector<string> *parsed_args, vector<int> *redirection_indices)
 {
-
     for (auto it = parsed_args->begin(); it != parsed_args->end(); it++)
     {
         if (*it == "$" || *it == ">" || *it == "<" || *it == ">>" || *it == "<<")
         {
             redirection_indices->push_back(it - parsed_args->begin());
         }
-    }
-
-    /*
-
-    if (*it == "$" || *it == ">" || *it == "<" || *it == ">>" || *it == "<<")
-    {
-        *io_redirection = "pipe";
-        *redirection_index = it - parsed_args->begin();
-        break;
-    }
-    if (*it == ">")
-    {
-        *io_redirection = "output overwrite";
-        *redirection_index = it - parsed_args->begin();
-        break;
-    }
-    if (*it == "<")
-    {
-        *io_redirection = "input overwrite";
-        *redirection_index = it - parsed_args->begin();
-        break;
-    }
-    if (*it == ">>")
-    {
-        *io_redirection = "append output";
-        *redirection_index = it - parsed_args->begin();
-        break;
-    }
-    if (*it == "<<")
-    {
-        *io_redirection = "append input";
-        *redirection_index = it - parsed_args->begin();
-        break;
-    }
-
-    *io_redirection = "";
-    *redirection_index = 0;
-    */
+    }    
 }
 
-// https://stackoverflow.com/questions/52490877/execvp-using-vectorstring#:~:text=You%20can't%20use%20it,internal%20buffer%20into%20another%20vector%20.&text=You%20can%20call%20execvp%20something,char*%3E%20argv(arguments_.
-void system_call(vector<string> *parsed_args)
+bool check_pipe(vector<string> *redirections)
+{
+    for (auto it = redirections->begin(); it != redirections->end(); it++)
+    {
+        if (*it == "$")
+        {
+            return true;   //pipe
+        }
+    }
+    return false;   //no pipe
+}
+
+int system_call(vector<string> *parsed_args)
 {
     cout << "in system_call" << endl;
     vector<char *> argv;
@@ -112,9 +121,80 @@ void system_call(vector<string> *parsed_args)
         argv.push_back((char *)args);
     }
 
-    argv.push_back(nullptr);
+    argv.push_back(nullptr);  // nullptr terminator
 
-    execvp(cmd, argv.data());
+    // following code taken from Amir tutorial AssignExample 2 fork-execvp.cpp
+    int pid = fork();
+    // From now on we have two process running the same code
+    if (pid < 0)
+    {
+        // This means fork failed
+        fprintf(stderr, "Fork failed!\n");
+        return 1;
+    }
+    else if (pid == 0)
+    {
+        // This means child is running
+        int ret_stat = execvp(cmd, argv.data());
+        printf("I am the child; the command returned %d\n", ret_stat);
+    }
+    else if (pid > 0)
+    {
+        // This means parent is running
+        int ret_stat;
+        wait(&ret_stat);
+        waitpid(pid, &ret_stat, 0);
+        printf("I am the parent; the child returned %d\n", ret_stat);
+    }
+    return 0;
+}
+
+int pipe_system_call(vector<int> *redirection_indices, vector<vector<string>> *cmds, vector<string> *redirections)
+{
+    cout << "in pipe system_call" << endl;
+    vector<vector<char *>> argv;
+    //vector<char *> redirections;
+
+    const char *cmd1 = cmds->front().front().c_str();
+    const char *cmd2 = cmds->at(1).front().c_str();
+
+    for (int i = 0; i < cmds->size(); i++)
+    {
+        vector<char *> input;
+        for (int j = 0; j < cmds->at(i).size(); j++)
+        {
+            const char *args = cmds->at(i).at(j).c_str();
+            input.push_back((char *)args);
+        }
+        input.push_back(nullptr);   //nullptr terminator
+        argv.push_back(input);
+    }
+
+    // citation: Amir Tutorial AssignExample2 pipe.cpp
+    int status;
+    int fd_pair[2];
+    // Create a pipe
+    pipe(fd_pair);
+    pid_t cpid = fork();
+    if (cpid == 0)
+    {
+        // Close the read end in the child
+        close(fd_pair[0]);
+        // Bind the write end with the child's output stream
+        dup2(fd_pair[1], 1);
+        // Invoke the command
+        status = execvp(cmd1, argv.front().data());
+    }
+    else if (cpid > 0)
+    {
+        // Close the write end in the parent
+        close(fd_pair[1]);
+        // Bind the read end to parent's input stream
+        dup2(fd_pair[0], 0);
+        // Invoke the command
+        status = execvp(cmd2, argv.back().data());
+    }
+    return status;
 }
 
 // Citation: Alex's Tutorial Example1_OpenClose.cpp
@@ -149,83 +229,43 @@ void open_close(vector<string> *parsed_args)
     */
 }
 
-void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices)
-{
-    cout << "In multi_cmd" << endl;
-    vector<vector<string>> cmds;
-    vector<string> redirections;
-    int j_start = 0;
-    int redirection_index = 0;
-
-    for (int i = 0; i < redirection_indices->size() + 1; i++)
-    {
-        vector<string> next_input;
-        vector<string> next_parsed_args;
-
-        // checks if added final redirection already
-        if (j_start != redirection_indices->back() + 1)
-        {
-            redirection_index = redirection_indices->at(i);
-            redirections.push_back(parsed_args->at(redirection_index));
-        }
-        // if already added final redirection, get final command
-        else
-        {
-            redirection_index = parsed_args->size();
-        }
-
-        for (int j = j_start; j < redirection_index; j++)
-        {
-            next_input.push_back(parsed_args->at(j));
-        }
-        cmds.push_back(next_input);
-
-        j_start = redirection_index + 1;
-    }
-}
 
 // https://www.geeksforgeeks.org/making-linux-shell-c/
 int main()
 {
     // init_JadaShell();
     while (1)
-    {
-
+    {    
         int flag = 0;
+        int num_of_redirections;
         vector<string> parsed_args;
         vector<int> redirection_indices;
-        int num_of_redirections;
+        vector<vector<string>> cmds;
+        vector<string> redirections;
 
         cout << "JadaShell> ";
-
         flag = parser(&parsed_args);
-        // flag returns 0 if quit
-        // flag returns 1 if command
+        // flag returns 1 if quit/ error
+        // flag returns 0 if command/ running
 
-        // Determine the command name, and construct the parameter list
-        // argv[0] - command name
-        // argv[1] - first parameter
-        // argv[2] - second parameter
-        // ...
-        // argv[N] - Nth parameter
-        // argv[N+1] - NULL to indicate end of parameter list
-        // Find the full path name for the file
-        // Launch the executable file with the specified parameters using
-        // the execvp command and the argv array.
-        if (flag == 1)
+        if (flag == 0)
         {
-
+            
             check_commands(&parsed_args, &redirection_indices);
-            cout << "num of redirections: " << redirection_indices.size() << endl;
+            //cout << "num of redirections: " << redirection_indices.size() << endl;
 
             if (redirection_indices.size() == 0) // no io_redirection called
             {
-                system_call(&parsed_args);
+                flag = system_call(&parsed_args);
             }
             else
             {
-                multi_cmd(&parsed_args, &redirection_indices);
-            }
+                multi_cmd(&parsed_args, &redirection_indices, &cmds, &redirections);
+                if (check_pipe(&redirections)) // TODO not always pipe first
+                {
+                    flag = pipe_system_call(&redirection_indices, &cmds, &redirections);    
+                }
+            } 
         }
         else
         {
