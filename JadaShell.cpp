@@ -8,12 +8,11 @@
 #include <fcntl.h>  //defines open(), O_RDONLY
 #include <numeric>
 #include <algorithm>
-#include<sys/wait.h>
+#include <sys/wait.h>
 
 #define MAX_WORD_SIZE 80
 #define MAX_LETTER_SIZE 1000
 #define BUFFER_SIZE 1024
-
 
 using namespace std;
 
@@ -93,7 +92,7 @@ void check_commands(vector<string> *parsed_args, vector<int> *redirection_indice
         {
             redirection_indices->push_back(it - parsed_args->begin());
         }
-    }    
+    }
 }
 
 bool check_pipe(vector<string> *redirections)
@@ -102,10 +101,10 @@ bool check_pipe(vector<string> *redirections)
     {
         if (*it == "$")
         {
-            return true;   //pipe
+            return true; // pipe
         }
     }
-    return false;   //no pipe
+    return false; // no pipe
 }
 
 int system_call(vector<string> *parsed_args)
@@ -121,7 +120,7 @@ int system_call(vector<string> *parsed_args)
         argv.push_back((char *)args);
     }
 
-    argv.push_back(nullptr);  // nullptr terminator
+    argv.push_back(nullptr); // nullptr terminator
 
     // following code taken from Amir tutorial AssignExample 2 fork-execvp.cpp
     int pid = fork();
@@ -153,7 +152,7 @@ int pipe_system_call(vector<int> *redirection_indices, vector<vector<string>> *c
 {
     cout << "in pipe system_call" << endl;
     vector<vector<char *>> argv;
-    //vector<char *> redirections;
+    // vector<char *> redirections;
 
     const char *cmd1 = cmds->front().front().c_str();
     const char *cmd2 = cmds->at(1).front().c_str();
@@ -166,7 +165,7 @@ int pipe_system_call(vector<int> *redirection_indices, vector<vector<string>> *c
             const char *args = cmds->at(i).at(j).c_str();
             input.push_back((char *)args);
         }
-        input.push_back(nullptr);   //nullptr terminator
+        input.push_back(nullptr); // nullptr terminator
         argv.push_back(input);
     }
 
@@ -176,7 +175,14 @@ int pipe_system_call(vector<int> *redirection_indices, vector<vector<string>> *c
     // Create a pipe
     pipe(fd_pair);
     pid_t cpid = fork();
-    if (cpid == 0)
+
+    if (cpid < 0)
+    {
+        // This means fork failed
+        fprintf(stderr, "Fork failed!\n");
+        return 1;
+    }
+    else if (cpid == 0)
     {
         // Close the read end in the child
         close(fd_pair[0]);
@@ -185,7 +191,7 @@ int pipe_system_call(vector<int> *redirection_indices, vector<vector<string>> *c
         // Invoke the command
         status = execvp(cmd1, argv.front().data());
     }
-    else if (cpid > 0)
+    else
     {
         // Close the write end in the parent
         close(fd_pair[1]);
@@ -197,45 +203,115 @@ int pipe_system_call(vector<int> *redirection_indices, vector<vector<string>> *c
     return status;
 }
 
-// Citation: Alex's Tutorial Example1_OpenClose.cpp
-// use this for working with I/O Redirection
-void open_close(vector<string> *parsed_args)
+int overwrite_system_call(vector<int> *redirection_indices, vector<vector<string>> *cmds, vector<string> *redirections)
 {
-    cout << "in open_close" << endl;
+    cout << "in overwrite_system_call" << endl;
+    vector<vector<char *>> argv;
+    // vector<char *> redirections;
 
-    // char *pathname = "/home/ugd/jada.li/.vscode-server/bin/899d46d82c4c95423fb7e10e68eba52050e30ba3/bin:/home/ugd/jada.li/.vscode-server/bin/899d46d82c4c95423fb7e10e68eba52050e30ba3/bin:/usr/share/ucalgary/bin:/usr/lib64/ccache:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/usr/local/cuda/bin/";
+    const char *cmd1 = cmds->front().front().c_str();
+    const char *cmd2 = cmds->at(1).front().c_str();
 
-    // pathname += cmd[0];
-    //  search directory
-    //  Const keyword in C++:
-    //  This means that the pointer is pointing to a const variable
-    //  Convert a string to a char* - use method c_str() to get C string version
-
-    /*
-    // open an existing file
-    int fd = open(pathname,O_RDONLY);
-
-    char buffer[BUFFER_SIZE];
-    if (read(fd,buffer,BUFFER_SIZE) > 0)
+    for (int i = 0; i < cmds->size(); i++)
     {
-        // read stuff, print it screen
-        string s(buffer);
-        cout << s << endl;
+        vector<char *> input;
+        for (int j = 0; j < cmds->at(i).size(); j++)
+        {
+            const char *args = cmds->at(i).at(j).c_str();
+            input.push_back((char *)args);
+        }
+        input.push_back(nullptr); // nullptr terminator
+        argv.push_back(input);
+    }
+
+    int status;
+    int fd_pair[2];
+    // Create a pipe
+    pipe(fd_pair);
+    pid_t cpid = fork();
+
+    if (cpid < 0)
+    {
+        // This means fork failed
+        fprintf(stderr, "Fork failed!\n");
+        return 1;
+    }
+    else if (cpid == 0)
+    {
+        // citation Amir AssignExample2 Tutorial dup.cpp
+
+        // overwrite standard output ">"
+        if ((fd_pair[0] = open(cmd2, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) < 0)
+        {
+            fprintf(stderr, "Output file could not be opened\n");
+            return 1;
+        }
+        // Bind the write end with the child's output stream
+        dup2(fd_pair[0], 1); // 1 -> stdout
+        // From now on, all my output is redirected to the file
+        status = execvp(cmd1, argv.front().data());
+        close(fd_pair[0]);
+
+        // overwrite standard input "<"
+        /*
+        if ((fd_pair[1] = open(cmd2, O_RDONLY | O_CREAT, S_IRUSR | S_IRGRP)) < 0)
+        {
+            fprintf(stderr, "Input file could not be opened\n");
+            return 1;
+        }
+        // Bind the write end with the child's output stream
+        dup2(fd_pair[1], 0); // 0 -> stdin
+        // From now on, all my input is redirected to the file
+        status = execvp(cmd1, argv.front().data());
+        close(fd_pair[1]);
+        */
     }
     else
-        cout << "Couldn't read anything" << endl;
-
-    close(fd); // Always close the file!!
-    */
+    {
+        while (!(wait(&status) == cpid))
+            ;
+    }
+    return 0;
 }
 
+// Citation: Alex's Tutorial Example1_OpenClose.cpp
+// use this for working with I/O Redirection
+// void open_close(vector<string> *parsed_args)
+//{
+//  cout << "in open_close" << endl;
+
+// char *pathname = "/home/ugd/jada.li/.vscode-server/bin/899d46d82c4c95423fb7e10e68eba52050e30ba3/bin:/home/ugd/jada.li/.vscode-server/bin/899d46d82c4c95423fb7e10e68eba52050e30ba3/bin:/usr/share/ucalgary/bin:/usr/lib64/ccache:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/usr/local/cuda/bin/";
+
+// pathname += cmd[0];
+//  search directory
+//  Const keyword in C++:
+//  This means that the pointer is pointing to a const variable
+//  Convert a string to a char* - use method c_str() to get C string version
+
+/*
+// open an existing file
+int fd = open(pathname,O_RDONLY);
+
+char buffer[BUFFER_SIZE];
+if (read(fd,buffer,BUFFER_SIZE) > 0)
+{
+    // read stuff, print it screen
+    string s(buffer);
+    cout << s << endl;
+}
+else
+    cout << "Couldn't read anything" << endl;
+
+close(fd); // Always close the file!!
+*/
+//}
 
 // https://www.geeksforgeeks.org/making-linux-shell-c/
 int main()
 {
     // init_JadaShell();
     while (1)
-    {    
+    {
         int flag = 0;
         int num_of_redirections;
         vector<string> parsed_args;
@@ -250,9 +326,9 @@ int main()
 
         if (flag == 0)
         {
-            
+
             check_commands(&parsed_args, &redirection_indices);
-            //cout << "num of redirections: " << redirection_indices.size() << endl;
+            // cout << "num of redirections: " << redirection_indices.size() << endl;
 
             if (redirection_indices.size() == 0) // no io_redirection called
             {
@@ -263,9 +339,13 @@ int main()
                 multi_cmd(&parsed_args, &redirection_indices, &cmds, &redirections);
                 if (check_pipe(&redirections)) // TODO not always pipe first
                 {
-                    flag = pipe_system_call(&redirection_indices, &cmds, &redirections);    
+                    flag = pipe_system_call(&redirection_indices, &cmds, &redirections);
                 }
-            } 
+                else // hardcoded not correct if else redirection only used to test overwrite system call
+                {
+                    flag = overwrite_system_call(&redirection_indices, &cmds, &redirections);
+                }
+            }
         }
         else
         {
