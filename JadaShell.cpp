@@ -18,7 +18,8 @@ using namespace std;
 
 enum cmds
 {
-    is_pipe = '$',
+    my_pipe = '$',
+    is_pipe = '|',
     is_output = '>',
     is_input = '<',
     is_background = '&'
@@ -56,6 +57,7 @@ int parser(vector<string> *parsed_args)
     }
 }
 
+// splits up args and redirections
 void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, vector<vector<string>> *input, vector<cmds> *redirections)
 {
     cout << ">> in multi_cmd%" << endl;
@@ -73,6 +75,10 @@ void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, ve
             redirection_index = redirection_indices->at(i);
 
             if (parsed_args->at(redirection_index) == "$")
+            {
+                redirections->push_back(my_pipe);
+            }
+            else if (parsed_args->at(redirection_index) == "|")
             {
                 redirections->push_back(is_pipe);
             }
@@ -109,6 +115,7 @@ void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, ve
     }
 }
 
+// formats input for execvp call
 void format_input(vector<vector<string>> *input, vector<vector<char *>> *argv)
 {
     // int pipe_system_call(vector<int> * redirection_indices, vector<vector<string>> * input, vector<cmds> * redirections)
@@ -128,17 +135,19 @@ void format_input(vector<vector<string>> *input, vector<vector<char *>> *argv)
     }
 }
 
+// checks for any commands
 void check_input(vector<string> *parsed_args, vector<int> *redirection_indices)
 {
     for (auto it = parsed_args->begin(); it != parsed_args->end(); it++)
     {
-        if (*it == "$" || *it == ">" || *it == "<" || *it == ">>" || *it == "<<")
+        if (*it == "|" || *it == "$" || *it == ">" || *it == "<" || *it == ">>" || *it == "<<")
         {
             redirection_indices->push_back(it - parsed_args->begin());
         }
     }
 }
 
+// TODO delete this -> used for testing
 bool check_pipe(vector<cmds> *redirections)
 {
     for (auto it = redirections->begin(); it != redirections->end(); it++)
@@ -151,6 +160,7 @@ bool check_pipe(vector<cmds> *redirections)
     return false; // no pipe
 }
 
+// single command system call
 int system_call(vector<string> *parsed_args)
 {
     cout << ">> in system_call%" << endl;
@@ -190,6 +200,7 @@ int system_call(vector<string> *parsed_args)
     return status;
 }
 
+// pipe system call
 int pipe_system_call(vector<int> *redirection_indices, vector<vector<char *>> *argv, vector<cmds> *redirections)
 {
     cout << ">> in pipe system_call%" << endl;
@@ -231,6 +242,7 @@ int pipe_system_call(vector<int> *redirection_indices, vector<vector<char *>> *a
     return status;
 }
 
+// overwrite system call
 int overwrite_system_call(vector<int> *redirection_indices, vector<vector<char *>> *argv, vector<cmds> *redirections)
 {
     cout << ">> in overwrite_system_call%" << endl;
@@ -324,6 +336,14 @@ int main()
             {
                 multi_cmd(&parsed_args, &redirection_indices, &inputs, &redirections);
                 format_input(&inputs, &argv);
+
+                /*
+                for (int i = 0; i < redirections.size(); i++)
+                {
+
+                }
+                */
+
                 if (check_pipe(&redirections)) // TODO not always pipe first
                 {
                     status = pipe_system_call(&redirection_indices, &argv, &redirections);
