@@ -16,30 +16,38 @@
 
 using namespace std;
 
+enum cmds
+{
+    is_pipe = '$',
+    is_output = '>',
+    is_input = '<',
+    is_background = '&'
+};
+
 // parser function
 // Citation: Amir Week 3 Tutorial AssignExample1
 int parser(vector<string> *parsed_args)
 {
-    string command;
+    string input;
 
     while (true)
     {
-        getline(cin, command);
+        getline(cin, input);
 
         int space_index;
         // command.find(' ') returns an iterator to the first element in the range that is a ' '
         // npos is a constant value w greatest possible value for an element of type size_t
         // while loop searches for ' ' until the last element is reached
-        while ((space_index = command.find(' ')) != string::npos)
+        while ((space_index = input.find(' ')) != string::npos)
         {
             // push_back adds new elem at end of vector after the current last elem
             // substr takes string values between command[0] and command[space_index]
-            parsed_args->push_back(command.substr(0, space_index));
+            parsed_args->push_back(input.substr(0, space_index));
             // erase removes command[0] to command[space_index] from command
-            command.erase(0, space_index + 1);
+            input.erase(0, space_index + 1);
         }
         // push_back next command
-        parsed_args->push_back(command);
+        parsed_args->push_back(input);
 
         if (parsed_args->front() == "q")
             return 1;
@@ -48,9 +56,9 @@ int parser(vector<string> *parsed_args)
     }
 }
 
-void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, vector<vector<string>> *cmds, vector<string> *redirections)
+void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, vector<vector<string>> *input, vector<cmds> *redirections)
 {
-    cout << "In multi_cmd" << endl;
+    cout << ">> in multi_cmd%" << endl;
     int j_start = 0;
     int redirection_index = 0;
 
@@ -63,8 +71,25 @@ void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, ve
         if (j_start != redirection_indices->back() + 1)
         {
             redirection_index = redirection_indices->at(i);
-            redirections->push_back(parsed_args->at(redirection_index));
+
+            if (parsed_args->at(redirection_index) == "$")
+            {
+                redirections->push_back(is_pipe);
+            }
+            else if (parsed_args->at(redirection_index) == ">")
+            {
+                redirections->push_back(is_output);
+            }
+            else if (parsed_args->at(redirection_index) == "<")
+            {
+                redirections->push_back(is_input);
+            }
+            else
+            {
+                redirections->push_back(is_background);
+            }
         }
+
         // if already added final redirection, get final command
         else
         {
@@ -76,7 +101,7 @@ void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, ve
             next_input.push_back(parsed_args->at(j));
             // cout << "next_input: " << parsed_args->at(j) << endl;
         }
-        cmds->push_back(next_input);
+        input->push_back(next_input);
         // cout<< "cmds front: " << cmds->at(i).front() << endl;
         // cout << "cmds back: " << cmds->at(i).back() << endl;
 
@@ -84,7 +109,26 @@ void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, ve
     }
 }
 
-void check_commands(vector<string> *parsed_args, vector<int> *redirection_indices)
+void format_input(vector<vector<string>> *input, vector<vector<char *>> *argv)
+{
+    // int pipe_system_call(vector<int> * redirection_indices, vector<vector<string>> * input, vector<cmds> * redirections)
+
+    cout << ">> in format_input%" << endl;
+
+    for (int i = 0; i < input->size(); i++)
+    {
+        vector<char *> temp;
+        for (int j = 0; j < input->at(i).size(); j++)
+        {
+            const char *args = input->at(i).at(j).c_str();
+            temp.push_back((char *)args);
+        }
+        temp.push_back(nullptr); // nullptr terminator
+        argv->push_back(temp);
+    }
+}
+
+void check_input(vector<string> *parsed_args, vector<int> *redirection_indices)
 {
     for (auto it = parsed_args->begin(); it != parsed_args->end(); it++)
     {
@@ -95,11 +139,11 @@ void check_commands(vector<string> *parsed_args, vector<int> *redirection_indice
     }
 }
 
-bool check_pipe(vector<string> *redirections)
+bool check_pipe(vector<cmds> *redirections)
 {
     for (auto it = redirections->begin(); it != redirections->end(); it++)
     {
-        if (*it == "$")
+        if (*it == is_pipe)
         {
             return true; // pipe
         }
@@ -109,9 +153,9 @@ bool check_pipe(vector<string> *redirections)
 
 int system_call(vector<string> *parsed_args)
 {
-    cout << "in system_call" << endl;
+    cout << ">> in system_call%" << endl;
     vector<char *> argv;
-
+    int status;
     const char *cmd = parsed_args->front().c_str();
 
     for (int i = 0; i < parsed_args->size(); i++)
@@ -134,44 +178,28 @@ int system_call(vector<string> *parsed_args)
     else if (pid == 0)
     {
         // This means child is running
-        int ret_stat = execvp(cmd, argv.data());
-        printf("I am the child; the command returned %d\n", ret_stat);
+        status = execvp(cmd, argv.data());
     }
     else if (pid > 0)
     {
         // This means parent is running
-        int ret_stat;
-        wait(&ret_stat);
-        waitpid(pid, &ret_stat, 0);
-        printf("I am the parent; the child returned %d\n", ret_stat);
+
+        wait(&status);
+        waitpid(pid, &status, 0);
     }
-    return 0;
+    return status;
 }
 
-int pipe_system_call(vector<int> *redirection_indices, vector<vector<string>> *cmds, vector<string> *redirections)
+int pipe_system_call(vector<int> *redirection_indices, vector<vector<char *>> *argv, vector<cmds> *redirections)
 {
-    cout << "in pipe system_call" << endl;
-    vector<vector<char *>> argv;
-    // vector<char *> redirections;
-
-    const char *cmd1 = cmds->front().front().c_str();
-    const char *cmd2 = cmds->at(1).front().c_str();
-
-    for (int i = 0; i < cmds->size(); i++)
-    {
-        vector<char *> input;
-        for (int j = 0; j < cmds->at(i).size(); j++)
-        {
-            const char *args = cmds->at(i).at(j).c_str();
-            input.push_back((char *)args);
-        }
-        input.push_back(nullptr); // nullptr terminator
-        argv.push_back(input);
-    }
-
+    cout << ">> in pipe system_call%" << endl;
     // citation: Amir Tutorial AssignExample2 pipe.cpp
     int status;
     int fd_pair[2];
+
+    const char *cmd1 = argv->front().front();
+    const char *cmd2 = argv->back().front(); // TODO HARDCODED FOR TWO COMMANDS
+
     // Create a pipe
     pipe(fd_pair);
     pid_t cpid = fork();
@@ -189,7 +217,7 @@ int pipe_system_call(vector<int> *redirection_indices, vector<vector<string>> *c
         // Bind the write end with the child's output stream
         dup2(fd_pair[1], 1);
         // Invoke the command
-        status = execvp(cmd1, argv.front().data());
+        status = execvp(cmd1, argv->front().data());
     }
     else
     {
@@ -198,34 +226,18 @@ int pipe_system_call(vector<int> *redirection_indices, vector<vector<string>> *c
         // Bind the read end to parent's input stream
         dup2(fd_pair[0], 0);
         // Invoke the command
-        status = execvp(cmd2, argv.back().data());
+        status = execvp(cmd2, argv->back().data());
     }
     return status;
 }
 
-int overwrite_system_call(vector<int> *redirection_indices, vector<vector<string>> *cmds, vector<string> *redirections)
+int overwrite_system_call(vector<int> *redirection_indices, vector<vector<char *>> *argv, vector<cmds> *redirections)
 {
-    cout << "in overwrite_system_call" << endl;
-    vector<vector<char *>> argv;
-    // vector<char *> redirections;
-
-    const char *cmd1 = cmds->front().front().c_str();
-    const char *cmd2 = cmds->at(1).front().c_str();
-
-    for (int i = 0; i < cmds->size(); i++)
-    {
-        vector<char *> input;
-        for (int j = 0; j < cmds->at(i).size(); j++)
-        {
-            const char *args = cmds->at(i).at(j).c_str();
-            input.push_back((char *)args);
-        }
-        input.push_back(nullptr); // nullptr terminator
-        argv.push_back(input);
-    }
-
+    cout << ">> in overwrite_system_call%" << endl;
     int status;
     int fd_pair[2];
+    const char *cmd1 = argv->front().front();
+    const char *cmd2 = argv->back().front(); // TODO HARDCODED FOR TWO COMMANDS
     // Create a pipe
     pipe(fd_pair);
     pid_t cpid = fork();
@@ -241,30 +253,34 @@ int overwrite_system_call(vector<int> *redirection_indices, vector<vector<string
         // citation Amir AssignExample2 Tutorial dup.cpp
 
         // overwrite standard output ">"
-        if ((fd_pair[0] = open(cmd2, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) < 0)
+        if (redirections->front() == is_output)
         {
-            fprintf(stderr, "Output file could not be opened\n");
-            return 1;
+            if ((fd_pair[0] = open(cmd2, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) < 0)
+            {
+                fprintf(stderr, "Output file could not be opened\n");
+                return 1;
+            }
+            // Bind the write end with the child's output stream
+            dup2(fd_pair[0], 1); // 1 -> stdout
+            // From now on, all my output is redirected to the file
+            status = execvp(cmd1, argv->front().data());
+            close(fd_pair[0]);
         }
-        // Bind the write end with the child's output stream
-        dup2(fd_pair[0], 1); // 1 -> stdout
-        // From now on, all my output is redirected to the file
-        status = execvp(cmd1, argv.front().data());
-        close(fd_pair[0]);
 
         // overwrite standard input "<"
-        /*
-        if ((fd_pair[1] = open(cmd2, O_RDONLY | O_CREAT, S_IRUSR | S_IRGRP)) < 0)
+        if (redirections->front() == is_input)
         {
-            fprintf(stderr, "Input file could not be opened\n");
-            return 1;
+            if ((fd_pair[1] = open(cmd2, O_RDONLY | O_CREAT, S_IRUSR | S_IRGRP)) < 0)
+            {
+                fprintf(stderr, "Input file could not be opened\n");
+                return 1;
+            }
+            // Bind the write end with the child's output stream
+            dup2(fd_pair[1], 0); // 0 -> stdin
+            // From now on, all my input is redirected to the file
+            status = execvp(cmd1, argv->front().data());
+            close(fd_pair[1]);
         }
-        // Bind the write end with the child's output stream
-        dup2(fd_pair[1], 0); // 0 -> stdin
-        // From now on, all my input is redirected to the file
-        status = execvp(cmd1, argv.front().data());
-        close(fd_pair[1]);
-        */
     }
     else
     {
@@ -274,82 +290,53 @@ int overwrite_system_call(vector<int> *redirection_indices, vector<vector<string
     return 0;
 }
 
-// Citation: Alex's Tutorial Example1_OpenClose.cpp
-// use this for working with I/O Redirection
-// void open_close(vector<string> *parsed_args)
-//{
-//  cout << "in open_close" << endl;
-
-// char *pathname = "/home/ugd/jada.li/.vscode-server/bin/899d46d82c4c95423fb7e10e68eba52050e30ba3/bin:/home/ugd/jada.li/.vscode-server/bin/899d46d82c4c95423fb7e10e68eba52050e30ba3/bin:/usr/share/ucalgary/bin:/usr/lib64/ccache:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/usr/local/cuda/bin/";
-
-// pathname += cmd[0];
-//  search directory
-//  Const keyword in C++:
-//  This means that the pointer is pointing to a const variable
-//  Convert a string to a char* - use method c_str() to get C string version
-
-/*
-// open an existing file
-int fd = open(pathname,O_RDONLY);
-
-char buffer[BUFFER_SIZE];
-if (read(fd,buffer,BUFFER_SIZE) > 0)
-{
-    // read stuff, print it screen
-    string s(buffer);
-    cout << s << endl;
-}
-else
-    cout << "Couldn't read anything" << endl;
-
-close(fd); // Always close the file!!
-*/
-//}
-
 // https://www.geeksforgeeks.org/making-linux-shell-c/
 int main()
 {
     // init_JadaShell();
     while (1)
     {
-        int flag = 0;
+        int status = 0;
         int num_of_redirections;
-        vector<string> parsed_args;
-        vector<int> redirection_indices;
-        vector<vector<string>> cmds;
-        vector<string> redirections;
 
-        cout << "JadaShell> ";
-        flag = parser(&parsed_args);
+        vector<string> parsed_args;
+        vector<vector<string>> inputs;
+        vector<vector<char *>> argv;
+
+        vector<int> redirection_indices;
+        vector<cmds> redirections;
+
+        cout << "JadaShell% ";
+        status = parser(&parsed_args);
         // flag returns 1 if quit/ error
         // flag returns 0 if command/ running
 
-        if (flag == 0)
+        if (status == 0)
         {
-
-            check_commands(&parsed_args, &redirection_indices);
+            check_input(&parsed_args, &redirection_indices);
             // cout << "num of redirections: " << redirection_indices.size() << endl;
 
             if (redirection_indices.size() == 0) // no io_redirection called
             {
-                flag = system_call(&parsed_args);
+                status = system_call(&parsed_args);
             }
             else
             {
-                multi_cmd(&parsed_args, &redirection_indices, &cmds, &redirections);
+                multi_cmd(&parsed_args, &redirection_indices, &inputs, &redirections);
+                format_input(&inputs, &argv);
                 if (check_pipe(&redirections)) // TODO not always pipe first
                 {
-                    flag = pipe_system_call(&redirection_indices, &cmds, &redirections);
+                    status = pipe_system_call(&redirection_indices, &argv, &redirections);
                 }
                 else // hardcoded not correct if else redirection only used to test overwrite system call
                 {
-                    flag = overwrite_system_call(&redirection_indices, &cmds, &redirections);
+                    status = overwrite_system_call(&redirection_indices, &argv, &redirections);
                 }
             }
         }
         else
         {
-            cout << "Exiting JadaShell" << endl;
+            cout << "Exiting JadaShell%" << endl;
             break;
         }
     }
