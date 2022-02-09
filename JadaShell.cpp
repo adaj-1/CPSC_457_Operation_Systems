@@ -201,15 +201,15 @@ int system_call(vector<string> *parsed_args)
 }
 
 // pipe system call
-int pipe_system_call(vector<int> *redirection_indices, vector<vector<char *>> *argv, vector<cmds> *redirections)
+int pipe_system_call(vector<char *> *input1, vector<char *> *input2)
 {
     cout << ">> in pipe system_call%" << endl;
     // citation: Amir Tutorial AssignExample2 pipe.cpp
     int status;
     int fd_pair[2];
 
-    const char *cmd1 = argv->front().front();
-    const char *cmd2 = argv->back().front(); // TODO HARDCODED FOR TWO COMMANDS
+    const char *cmd1 = input1->front();
+    const char *cmd2 = input2->front(); // TODO HARDCODED FOR TWO COMMANDS
 
     // Create a pipe
     pipe(fd_pair);
@@ -228,7 +228,7 @@ int pipe_system_call(vector<int> *redirection_indices, vector<vector<char *>> *a
         // Bind the write end with the child's output stream
         dup2(fd_pair[1], 1);
         // Invoke the command
-        status = execvp(cmd1, argv->front().data());
+        status = execvp(cmd1, input1->data());
     }
     else
     {
@@ -237,19 +237,19 @@ int pipe_system_call(vector<int> *redirection_indices, vector<vector<char *>> *a
         // Bind the read end to parent's input stream
         dup2(fd_pair[0], 0);
         // Invoke the command
-        status = execvp(cmd2, argv->back().data());
+        status = execvp(cmd2, input2->data());
     }
     return status;
 }
 
 // overwrite system call
-int overwrite_system_call(vector<int> *redirection_indices, vector<vector<char *>> *argv, vector<cmds> *redirections)
+int overwrite_system_call(vector<char *> *input1, vector<char *> *input2, vector<cmds> *redirections)
 {
     cout << ">> in overwrite_system_call%" << endl;
     int status;
     int fd_pair[2];
-    const char *cmd1 = argv->front().front();
-    const char *cmd2 = argv->back().front(); // TODO HARDCODED FOR TWO COMMANDS
+    const char *cmd1 = input1->front();
+    const char *cmd2 = input2->front(); // TODO HARDCODED FOR TWO COMMANDS
     // Create a pipe
     pipe(fd_pair);
     pid_t cpid = fork();
@@ -275,7 +275,7 @@ int overwrite_system_call(vector<int> *redirection_indices, vector<vector<char *
             // Bind the write end with the child's output stream
             dup2(fd_pair[0], 1); // 1 -> stdout
             // From now on, all my output is redirected to the file
-            status = execvp(cmd1, argv->front().data());
+            status = execvp(cmd1, input1->data());
             close(fd_pair[0]);
         }
 
@@ -290,7 +290,7 @@ int overwrite_system_call(vector<int> *redirection_indices, vector<vector<char *
             // Bind the write end with the child's output stream
             dup2(fd_pair[1], 0); // 0 -> stdin
             // From now on, all my input is redirected to the file
-            status = execvp(cmd1, argv->front().data());
+            status = execvp(cmd1, input1->data());
             close(fd_pair[1]);
         }
     }
@@ -337,20 +337,21 @@ int main()
                 multi_cmd(&parsed_args, &redirection_indices, &inputs, &redirections);
                 format_input(&inputs, &argv);
 
-                /*
+                vector<char *> input1;
+                vector<char *> input2;
                 for (int i = 0; i < redirections.size(); i++)
                 {
+                    input1 = argv.at(i);
+                    input2 = argv.at(i + 1);
 
-                }
-                */
-
-                if (check_pipe(&redirections)) // TODO not always pipe first
-                {
-                    status = pipe_system_call(&redirection_indices, &argv, &redirections);
-                }
-                else // hardcoded not correct if else redirection only used to test overwrite system call
-                {
-                    status = overwrite_system_call(&redirection_indices, &argv, &redirections);
+                    if (redirections.at(i) == is_pipe)
+                    {
+                        status = pipe_system_call(&input1, &input2);
+                    }
+                    if (redirections.at(i) == is_output || redirections.at(i) == is_input)
+                    {
+                        status = overwrite_system_call(&input1, &input2, &redirections);
+                    }
                 }
             }
         }
