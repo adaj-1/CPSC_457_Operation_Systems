@@ -13,6 +13,8 @@
 #define MAX_WORD_SIZE 80
 #define MAX_LETTER_SIZE 1000
 #define BUFFER_SIZE 1024
+#define WRITE_END 1
+#define READ_END 0
 
 using namespace std;
 
@@ -302,6 +304,137 @@ int overwrite_system_call(vector<char *> *input1, vector<char *> *input2, vector
     return 0;
 }
 
+int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirections, vector<int> *redirection_indices)
+{
+    cout << ">> in multi_system_call%" << endl;
+    int status;
+    vector<char *> input1;
+    vector<char *> input2;
+    vector<char *> input3;
+    vector<char *> input4;
+
+    if (redirections->front() != my_pipe) // does not have "$"
+    {
+        if (redirections->size() == 1)
+        {
+            input1 = argv->front();
+            input2 = argv->back();
+            if (redirections->front() == is_pipe)
+            {
+                status = pipe_system_call(&input1, &input2);
+            }
+
+            if (redirections->front() == is_input || redirections->front() == is_output)
+            {
+                status = overwrite_system_call(&input1, &input2, redirections);
+            }
+        }
+        // TODO multiple io reidrections and pipes
+    }
+    else // has "$"
+    {
+        if (redirection_indices->front() == 1) // cmd1 $ cmd2 cmd3
+        {
+        }
+        if (argv->at(0).size() == 3) // cmd1 cmd2 $ cmd3
+        {
+            int fds[2];
+            pipe(fds);
+
+            pid_t pid1 = fork();
+
+            input1.push_back(argv->at(0).at(0));
+            input1.push_back(nullptr);
+
+            input2.push_back(argv->at(0).at(1));
+            input2.push_back(nullptr);
+
+            input3.push_back(argv->at(1).at(0));
+            input3.push_back(nullptr);
+
+            if (pid1 == -1)
+                perror("Error forking\n");
+            if (pid1 == 0) // child1
+            {
+                dup2(fds[READ_END], fileno(stdin));
+                // anything below here will write to fileno(stdout)
+                close(fds[READ_END]);
+                close(fds[WRITE_END]);
+                // 2
+                // You need to find a way to automate the creation of this char*[]
+                status = execvp(input3.at(0), input3.data());
+                // 3
+                perror("Error executing command in child");
+                exit(EXIT_FAILURE);
+            }
+            else // parent1
+            {
+                pid_t pid2 = fork();
+
+                if (pid2 == -1)
+                    perror("Error forking at child2");
+                if (pid2 == 0) // child2 executes ls
+                {
+                    // 5
+                    close(fds[READ_END]);
+                    close(fds[WRITE_END]);
+                    // 2
+
+                    // You need to find a way to automate the creation of this char*[]
+
+                    status = execvp(input2.at(0), input2.data());
+                    // 3
+                    perror("Error executing command in child");
+                    exit(EXIT_FAILURE);
+                }
+                else // parent2
+                {
+                    pid_t pid3 = fork();
+                    if (pid3 == -1)
+                        perror("Error forking at child3");
+                    if (pid3 == 0) // child3 executes pwd
+                    {
+                        // Look at this code, how do we change it for child#1 so that it redirects stdin
+                        dup2(fds[WRITE_END], fileno(stdout));
+                        // anything below here will write to fileno(stdout)
+                        close(fds[READ_END]);
+                        close(fds[WRITE_END]);
+                        // 2
+
+                        // You need to find a way to automate the creation of this char*[]
+                        // char *left1 = {"pwd", NULL}; // hardcoded
+
+                        status = execvp(input1.at(0), input1.data());
+                        // 3
+                        perror("Error executing command in child");
+                        exit(EXIT_FAILURE);
+                    }
+                    else // parent3
+                    {
+                        // This is the very first thing that runs
+                        int status;
+                        close(fds[READ_END]);
+                        close(fds[WRITE_END]);
+                        waitpid(pid3, &status, 0); // wait for child3
+                        // 1
+                    }
+
+                    int status;
+                    waitpid(pid2, &status, 0);
+                    // 4
+                }
+                int status;
+                waitpid(pid1, &status, 0);
+            }
+        }
+        if (argv->at(1).size() == 3) // cmd1 cmd2 $ cmd3 cmd4
+        {
+        }
+    }
+
+    return status;
+}
+
 // https://www.geeksforgeeks.org/making-linux-shell-c/
 int main()
 {
@@ -325,6 +458,7 @@ int main()
 
         if (status == 0)
         {
+
             check_input(&parsed_args, &redirection_indices);
             // cout << "num of redirections: " << redirection_indices.size() << endl;
 
@@ -337,22 +471,7 @@ int main()
                 multi_cmd(&parsed_args, &redirection_indices, &inputs, &redirections);
                 format_input(&inputs, &argv);
 
-                vector<char *> input1;
-                vector<char *> input2;
-                for (int i = 0; i < redirections.size(); i++)
-                {
-                    input1 = argv.at(i);
-                    input2 = argv.at(i + 1);
-
-                    if (redirections.at(i) == is_pipe)
-                    {
-                        status = pipe_system_call(&input1, &input2);
-                    }
-                    if (redirections.at(i) == is_output || redirections.at(i) == is_input)
-                    {
-                        status = overwrite_system_call(&input1, &input2, &redirections);
-                    }
-                }
+                status = multi_system_command(&argv, &redirections, &redirection_indices);
             }
         }
         else
