@@ -333,10 +333,87 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
     }
     else // has "$"
     {
-        if (redirection_indices->front() == 1) // cmd1 $ cmd2 cmd3
+        if (redirection_indices->at(0) == 1) // cmd1 $ cmd2 cmd3
         {
+            int fds[2];
+            pipe(fds);
+
+            pid_t pid1 = fork();
+
+            input1.push_back(argv->at(0).at(0));
+            input1.push_back(nullptr);
+
+            input2.push_back(argv->at(1).at(0));
+            input2.push_back(nullptr);
+
+            input3.push_back(argv->at(1).at(1));
+            input3.push_back(nullptr);
+
+            if (pid1 == -1)
+                perror("Error forking\n");
+            if (pid1 == 0) // child1
+            {
+                dup2(fds[READ_END], fileno(stdin));
+                // anything below here will write to fileno(stdout)
+                close(fds[READ_END]);
+                close(fds[WRITE_END]);
+
+                status = execvp(input3.at(0), input3.data());
+
+                perror("Error executing command in child");
+                exit(EXIT_FAILURE);
+            }
+            else // parent1
+            {
+                pid_t pid2 = fork();
+
+                if (pid2 == -1)
+                    perror("Error forking at child2");
+                if (pid2 == 0) // child2
+                {
+                    dup2(fds[READ_END], fileno(stdin));
+
+                    close(fds[READ_END]);
+                    close(fds[WRITE_END]);
+
+                    status = execvp(input2.at(0), input2.data());
+
+                    perror("Error executing command in child");
+                    exit(EXIT_FAILURE);
+                }
+                else // parent2
+                {
+                    pid_t pid3 = fork();
+                    if (pid3 == -1)
+                        perror("Error forking at child3");
+                    if (pid3 == 0) // child3
+                    {
+                        // Look at this code, how do we change it for child#1 so that it redirects stdin
+                        dup2(fds[WRITE_END], fileno(stdout));
+                        // anything below here will write to fileno(stdout)
+                        close(fds[READ_END]);
+                        close(fds[WRITE_END]);
+
+                        status = execvp(input1.at(0), input1.data());
+                        perror("Error executing command in child");
+                        exit(EXIT_FAILURE);
+                    }
+                    else // parent3
+                    {
+                        // This is the very first thing that runs
+                        int status;
+                        close(fds[READ_END]);
+                        close(fds[WRITE_END]);
+                        waitpid(pid3, &status, 0); // wait for child3
+                    }
+                    int status;
+                    waitpid(pid2, &status, 0);
+                }
+                int status;
+                waitpid(pid1, &status, 0);
+            }
         }
-        if (argv->at(0).size() == 3) // cmd1 cmd2 $ cmd3
+        else if (argv->at(0).size() == 3) // cmd1 cmd2 $ cmd3
         {
             int fds[2];
             pipe(fds);
@@ -361,7 +438,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                 close(fds[READ_END]);
                 close(fds[WRITE_END]);
                 // 2
-                // You need to find a way to automate the creation of this char*[]
                 status = execvp(input3.at(0), input3.data());
                 // 3
                 perror("Error executing command in child");
@@ -379,9 +455,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                     close(fds[READ_END]);
                     close(fds[WRITE_END]);
                     // 2
-
-                    // You need to find a way to automate the creation of this char*[]
-
                     status = execvp(input2.at(0), input2.data());
                     // 3
                     perror("Error executing command in child");
@@ -400,10 +473,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                         close(fds[READ_END]);
                         close(fds[WRITE_END]);
                         // 2
-
-                        // You need to find a way to automate the creation of this char*[]
-                        // char *left1 = {"pwd", NULL}; // hardcoded
-
                         status = execvp(input1.at(0), input1.data());
                         // 3
                         perror("Error executing command in child");
@@ -427,11 +496,100 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                 waitpid(pid1, &status, 0);
             }
         }
-        if (argv->at(1).size() == 3) // cmd1 cmd2 $ cmd3 cmd4
+        else if (argv->at(1).size() == 3) // cmd1 cmd2 $ cmd3 cmd4
         {
+            int fds[2];
+            pipe(fds);
+
+            pid_t pid1 = fork();
+
+            input1.push_back(argv->at(0).at(0));
+            input1.push_back(nullptr);
+
+            input2.push_back(argv->at(0).at(1));
+            input2.push_back(nullptr);
+
+            input3.push_back(argv->at(1).at(0));
+            input3.push_back(nullptr);
+
+            input4.push_back(argv->at(1).at(1));
+            input4.push_back(nullptr);
+
+            if (pid1 == -1)
+                perror("Error forking at child1\n");
+            if (pid1 == 0) // child1
+            {
+                dup2(fds[READ_END], fileno(stdin));
+                // anything below here will write to fileno(stdout)
+                close(fds[READ_END]);
+                close(fds[WRITE_END]);
+                status = execvp(input4.at(0), input4.data());
+                perror("Error executing command in child1");
+                exit(EXIT_FAILURE);
+            }
+            else // parent1
+            {
+                pid_t pid2 = fork();
+
+                if (pid2 == -1)
+                    perror("Error forking at child2");
+                if (pid2 == 0) // child2
+                {
+                    dup2(fds[READ_END], fileno(stdin));
+                    // anything below here will write to fileno(stdout)
+                    close(fds[READ_END]);
+                    close(fds[WRITE_END]);
+                    status = execvp(input3.at(0), input3.data());
+                    perror("Error executing command in child2");
+                    exit(EXIT_FAILURE);
+                }
+                else // parent2
+                {
+                    pid_t pid3 = fork();
+                    if (pid3 == -1)
+                        perror("Error forking at child3");
+                    if (pid3 == 0) // child3 executes pwd
+                    {
+                        close(fds[READ_END]);
+                        close(fds[WRITE_END]);
+                        status = execvp(input2.at(0), input2.data());
+                        perror("Error executing command in child3");
+                        exit(EXIT_FAILURE);
+                    }
+                    else // parent3
+                    {
+                        pid_t pid4 = fork();
+                        if (pid4 == -1)
+                            perror("Error forking at child4");
+                        if (pid4 == 0) // child4 executes pwd
+                        {
+                            dup2(fds[WRITE_END], fileno(stdout));
+                            // anything below here will write to fileno(stdout)
+                            close(fds[READ_END]);
+                            close(fds[WRITE_END]);
+                            status = execvp(input1.at(0), input1.data());
+                            perror("Error executing command in child4");
+                            exit(EXIT_FAILURE);
+                        }
+                        else // parent4
+                        {
+                            // This is the very first thing that runs
+                            int status;
+                            close(fds[READ_END]);
+                            close(fds[WRITE_END]);
+                            waitpid(pid4, &status, 0); // wait for child4
+                        }
+                        int status;
+                        waitpid(pid3, &status, 0); // wait for child3
+                    }
+                    int status;
+                    waitpid(pid2, &status, 0);
+                }
+                int status;
+                waitpid(pid1, &status, 0);
+            }
         }
     }
-
     return status;
 }
 
