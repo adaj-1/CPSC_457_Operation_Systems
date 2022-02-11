@@ -107,12 +107,8 @@ void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, ve
         for (int j = j_start; j < redirection_index; j++)
         {
             next_input.push_back(parsed_args->at(j));
-            // cout << "next_input: " << parsed_args->at(j) << endl;
         }
         input->push_back(next_input);
-        // cout<< "cmds front: " << cmds->at(i).front() << endl;
-        // cout << "cmds back: " << cmds->at(i).back() << endl;
-
         j_start = redirection_index + 1;
     }
 }
@@ -142,24 +138,11 @@ void check_input(vector<string> *parsed_args, vector<int> *redirection_indices)
 {
     for (auto it = parsed_args->begin(); it != parsed_args->end(); it++)
     {
-        if (*it == "|" || *it == "$" || *it == ">" || *it == "<" || *it == ">>" || *it == "<<")
+        if (*it == "|" || *it == "$" || *it == ">" || *it == "<" || *it == ">>" || *it == "<<" || *it == "&")
         {
             redirection_indices->push_back(it - parsed_args->begin());
         }
     }
-}
-
-// TODO delete this -> used for testing
-bool check_pipe(vector<cmds> *redirections)
-{
-    for (auto it = redirections->begin(); it != redirections->end(); it++)
-    {
-        if (*it == is_pipe)
-        {
-            return true; // pipe
-        }
-    }
-    return false; // no pipe
 }
 
 // single command system call
@@ -184,8 +167,7 @@ int system_call(vector<string> *parsed_args)
     if (pid < 0)
     {
         // This means fork failed
-        fprintf(stderr, "Fork failed!\n");
-        return 1;
+        perror("Error forking\n");
     }
     else if (pid == 0)
     {
@@ -195,7 +177,6 @@ int system_call(vector<string> *parsed_args)
     else if (pid > 0)
     {
         // This means parent is running
-
         wait(&status);
         waitpid(pid, &status, 0);
     }
@@ -203,41 +184,38 @@ int system_call(vector<string> *parsed_args)
 }
 
 // pipe system call
-int pipe_system_call(vector<char *> *input1, vector<char *> *input2)
+int pipe_system_call(vector<char *> *input1, vector<char *> *input2, vector<cmds> *redirections)
 {
     cout << ">> in pipe system_call%" << endl;
     // citation: Amir Tutorial AssignExample2 pipe.cpp
     int status;
-    int fd_pair[2];
+    int fds[2];
+    // Create a pipe
+    pipe(fds);
+    pid_t pid = fork();
 
     const char *cmd1 = input1->front();
-    const char *cmd2 = input2->front(); // TODO HARDCODED FOR TWO COMMANDS
+    const char *cmd2 = input2->front();
 
-    // Create a pipe
-    pipe(fd_pair);
-    pid_t cpid = fork();
-
-    if (cpid < 0)
+    if (pid < 0)
     {
-        // This means fork failed
-        fprintf(stderr, "Fork failed!\n");
-        return 1;
+        perror("Error forking\n");
     }
-    else if (cpid == 0)
+    else if (pid == 0)
     {
         // Close the read end in the child
-        close(fd_pair[0]);
+        close(fds[READ_END]);
         // Bind the write end with the child's output stream
-        dup2(fd_pair[1], 1);
+        dup2(fds[WRITE_END], 1);
         // Invoke the command
         status = execvp(cmd1, input1->data());
     }
     else
     {
         // Close the write end in the parent
-        close(fd_pair[1]);
+        close(fds[WRITE_END]);
         // Bind the read end to parent's input stream
-        dup2(fd_pair[0], 0);
+        dup2(fds[READ_END], 0);
         // Invoke the command
         status = execvp(cmd2, input2->data());
     }
@@ -249,57 +227,63 @@ int overwrite_system_call(vector<char *> *input1, vector<char *> *input2, vector
 {
     cout << ">> in overwrite_system_call%" << endl;
     int status;
-    int fd_pair[2];
+    int fds[2];
     const char *cmd1 = input1->front();
     const char *cmd2 = input2->front(); // TODO HARDCODED FOR TWO COMMANDS
     // Create a pipe
-    pipe(fd_pair);
-    pid_t cpid = fork();
+    pipe(fds);
+    pid_t pid = fork();
 
-    if (cpid < 0)
+    if (pid < 0)
     {
         // This means fork failed
         fprintf(stderr, "Fork failed!\n");
         return 1;
     }
-    else if (cpid == 0)
+    else if (pid == 0)
     {
         // citation Amir AssignExample2 Tutorial dup.cpp
 
         // overwrite standard output ">"
         if (redirections->front() == is_output)
         {
-            if ((fd_pair[0] = open(cmd2, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) < 0)
+            if ((fds[0] = open(cmd2, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP)) < 0)
             {
                 fprintf(stderr, "Output file could not be opened\n");
                 return 1;
             }
             // Bind the write end with the child's output stream
-            dup2(fd_pair[0], 1); // 1 -> stdout
+            dup2(fds[0], 1); // 1 -> stdout
             // From now on, all my output is redirected to the file
             status = execvp(cmd1, input1->data());
-            close(fd_pair[0]);
+            close(fds[0]);
         }
 
         // overwrite standard input "<"
         if (redirections->front() == is_input)
         {
-            if ((fd_pair[1] = open(cmd2, O_RDONLY | O_CREAT, S_IRUSR | S_IRGRP)) < 0)
+            if ((fds[1] = open(cmd2, O_RDONLY | O_CREAT, S_IRUSR | S_IRGRP)) < 0)
             {
                 fprintf(stderr, "Input file could not be opened\n");
                 return 1;
             }
             // Bind the write end with the child's output stream
-            dup2(fd_pair[1], 0); // 0 -> stdin
+            dup2(fds[1], 0); // 0 -> stdin
             // From now on, all my input is redirected to the file
             status = execvp(cmd1, input1->data());
-            close(fd_pair[1]);
+            close(fds[1]);
         }
     }
     else
     {
-        while (!(wait(&status) == cpid))
-            ;
+        if (redirections->back() != is_background)
+        {
+            waitpid(pid, &status, 0);
+        }
+        else
+        {
+            cout << pid << endl;
+        }
     }
     return 0;
 }
@@ -308,6 +292,7 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
 {
     cout << ">> in multi_system_call%" << endl;
     int status;
+    bool background;
     vector<char *> input1;
     vector<char *> input2;
     vector<char *> input3;
@@ -315,26 +300,35 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
 
     if (redirections->front() != my_pipe) // does not have "$"
     {
-        if (redirections->size() == 1)
-        {
-            input1 = argv->front();
-            input2 = argv->back();
-            if (redirections->front() == is_pipe)
-            {
-                status = pipe_system_call(&input1, &input2);
-            }
 
-            if (redirections->front() == is_input || redirections->front() == is_output)
-            {
-                status = overwrite_system_call(&input1, &input2, redirections);
-            }
+        // if (redirections->size() == 1)
+        //{
+        input1 = argv->front();
+        input2 = argv->back();
+        if (redirections->front() == is_pipe)
+        {
+            status = pipe_system_call(&input1, &input2, redirections);
         }
-        // TODO multiple io reidrections and pipes
+
+        if (redirections->front() == is_input || redirections->front() == is_output)
+        {
+            status = overwrite_system_call(&input1, &input2, redirections);
+        }
+        //}
+
+        /*
+        else
+        {
+            perror("Error: Did not implement extra credit question (multiple commands with regular pipe and special pipe)");
+            exit(EXIT_FAILURE);
+        }
+        */
     }
     else // has "$"
     {
         if (redirection_indices->at(0) == 1) // cmd1 $ cmd2 cmd3
         {
+            int status;
             int fds[2];
             pipe(fds);
 
@@ -401,15 +395,13 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                     else // parent3
                     {
                         // This is the very first thing that runs
-                        int status;
                         close(fds[READ_END]);
                         close(fds[WRITE_END]);
                         waitpid(pid3, &status, 0); // wait for child3
                     }
-                    int status;
+
                     waitpid(pid2, &status, 0);
                 }
-                int status;
                 waitpid(pid1, &status, 0);
             }
         }
@@ -619,7 +611,6 @@ int main()
 
             check_input(&parsed_args, &redirection_indices);
             // cout << "num of redirections: " << redirection_indices.size() << endl;
-
             if (redirection_indices.size() == 0) // no io_redirection called
             {
                 status = system_call(&parsed_args);
@@ -628,7 +619,10 @@ int main()
             {
                 multi_cmd(&parsed_args, &redirection_indices, &inputs, &redirections);
                 format_input(&inputs, &argv);
-
+                if (redirections.back() == is_background)
+                {
+                    argv.pop_back(); // remove end null value due to background redirection
+                }
                 status = multi_system_command(&argv, &redirections, &redirection_indices);
             }
         }
