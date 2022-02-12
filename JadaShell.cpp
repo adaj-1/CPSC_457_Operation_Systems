@@ -108,6 +108,25 @@ void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, ve
         input->push_back(next_input);
         j_start = redirection_index + 1; // update next command index (skip over input/output redirections, pipes, and background symbols)
     }
+
+    // error checking if first command ends in .txt when using output redirection
+    // Citation: https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
+    if (redirections->front() == is_output)
+    {
+        string cmd1 = parsed_args->front();
+        string file_end = ".txt";
+
+        bool is_file;
+        if (cmd1.compare(cmd1.length() - file_end.length(), file_end.length(), file_end))
+            ;
+        is_file = true;
+
+        if (is_file == true)
+        {
+            perror("Error: No command found ending in '.txt'\n");
+            exit(EXIT_FAILURE);
+        }
+    }
 }
 
 // formats vector<vector<string>>input for execvp call and error checking
@@ -194,9 +213,9 @@ int system_call(vector<string> *parsed_args)
     return status;
 }
 
-// pipe system call
+// Called for piping 2 commands
 // Citation: Amir Tutorial AssignExample2 pipe.cpp
-int pipe_system_call(vector<char *> *input1, vector<char *> *input2, vector<cmds> *redirections)
+int pipe_system_call(vector<char *> *input1, vector<char *> *input2)
 {
     cout << ">> in pipe system_call%" << endl;
 
@@ -212,7 +231,6 @@ int pipe_system_call(vector<char *> *input1, vector<char *> *input2, vector<cmds
     if (pid < 0)
     {
         perror("Error forking at child\n");
-        exit(EXIT_FAILURE);
     }
     else if (pid == 0)
     {
@@ -239,7 +257,7 @@ int pipe_system_call(vector<char *> *input1, vector<char *> *input2, vector<cmds
     return status;
 }
 
-// overwrite system call
+// called for input output redirection
 // Citation: Amir AssignExample2 Tutorial dup.cpp
 int overwrite_system_call(vector<char *> *input1, vector<char *> *input2, vector<cmds> *redirections)
 {
@@ -321,11 +339,23 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
 
     if (redirections->front() != my_pipe) // does not have "$"
     {
+        if (redirections->size() > 2) // error checking for more than one operator + background execution
+        {
+            perror("Error: Implemented manually using piping and redirection\n Cannot handle more than one operator (excluding uses of &)\n");
+            exit(EXIT_FAILURE);
+        }
+        if (redirections->size() == 2 && redirections->back() != is_background) // error checking if two redirections only allow second to be background execution
+        {
+            perror("Error: Implemented manually using piping and redirection\n Cannot handle more than one operator (excluding uses of &)\n");
+            exit(EXIT_FAILURE);
+        }
+
+        // execute operators
         input1 = argv->front();
         input2 = argv->back();
         if (redirections->front() == is_pipe)
         {
-            status = pipe_system_call(&input1, &input2, redirections);
+            status = pipe_system_call(&input1, &input2);
         }
 
         if (redirections->front() == is_input || redirections->front() == is_output)
@@ -605,7 +635,6 @@ int main()
 
         if (status == 0)
         {
-
             check_input(&parsed_args, &redirection_indices);
             // cout << "num of redirections: " << redirection_indices.size() << endl;
             if (redirection_indices.size() == 0) // no io_redirection called
@@ -614,20 +643,8 @@ int main()
             }
             else
             {
-                multi_cmd(&parsed_args, &redirection_indices, &inputs, &redirections); // sort commands and arguments
-                format_input(&inputs, &argv, &redirections);                           // reformat input for execvp execution and error checking
-
-                /*
-                for (auto it = redirections.begin(); it != redirections.end(); it++)
-                {
-                    char * temp = argv.at(it - redirections.begin()).front();
-                    if (*it == is_output)
-                    {
-                        if (temp == "file.txt")
-                            perror("testing");
-                    }
-                }
-                */
+                multi_cmd(&parsed_args, &redirection_indices, &inputs, &redirections);     // sort commands and arguments
+                format_input(&inputs, &argv, &redirections);                               // reformat input for execvp execution and error checking
                 status = multi_system_command(&argv, &redirections, &redirection_indices); // execute commands
             }
         }
