@@ -117,9 +117,10 @@ void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, ve
         string file_end = ".txt";
 
         bool is_file;
-        if (cmd1.compare(cmd1.length() - file_end.length(), file_end.length(), file_end))
-            ;
-        is_file = true;
+        if (cmd1.compare(cmd1.length() - file_end.length(), file_end.length(), file_end) == 0)
+            is_file = true;
+        else
+            is_file = false;
 
         if (is_file == true)
         {
