@@ -354,7 +354,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
 
             if (pid1 == -1)
                 perror("Error forking at child1\n");
-            exit(EXIT_FAILURE);
             if (pid1 == 0) // child1
             {
                 dup2(fds[READ_END], fileno(stdin));
@@ -371,7 +370,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
 
                 if (pid2 == -1)
                     perror("Error forking at child2");
-                exit(EXIT_FAILURE);
                 if (pid2 == 0) // child2
                 {
                     dup2(fds[READ_END], fileno(stdin));
@@ -386,7 +384,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                     pid_t pid3 = fork();
                     if (pid3 == -1)
                         perror("Error forking at child3");
-                    exit(EXIT_FAILURE);
                     if (pid3 == 0) // child3
                     {
                         // Look at this code, how do we change it for child#1 so that it redirects stdin
@@ -411,7 +408,7 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                 waitpid(pid1, &status, 0); // wait for child1
             }
         }
-        else if (argv->at(0).size() == 3) // cmd1 cmd2 $ cmd3
+        else if (argv->at(0).size() == 3 && argv->at(1).size() == 2) // cmd1 cmd2 $ cmd3
         {
             int fds[2];
             pipe(fds);
@@ -429,7 +426,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
 
             if (pid1 == -1)
                 perror("Error forking at child1\n");
-            exit(EXIT_FAILURE);
             if (pid1 == 0) // child1
             {
                 dup2(fds[READ_END], fileno(stdin));
@@ -448,7 +444,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
 
                 if (pid2 == -1)
                     perror("Error forking at child2");
-                exit(EXIT_FAILURE);
                 if (pid2 == 0)
                 {
                     close(fds[READ_END]);
@@ -462,7 +457,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                     pid_t pid3 = fork();
                     if (pid3 == -1)
                         perror("Error forking at child3");
-                    exit(EXIT_FAILURE);
                     if (pid3 == 0) // child3 executes pwd
                     {
                         // Look at this code, how do we change it for child#1 so that it redirects stdin
@@ -490,8 +484,9 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                 waitpid(pid1, &status, 0);
             }
         }
-        else if (argv->at(1).size() == 3) // cmd1 cmd2 $ cmd3 cmd4
+        else if (argv->at(0).size() == 3 && argv->at(1).size() == 3) // cmd1 cmd2 $ cmd3 cmd4
         {
+            cout << "testing" << endl;
             int fds[2];
             pipe(fds);
 
@@ -511,7 +506,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
 
             if (pid1 == -1)
                 perror("Error forking at child1\n");
-            exit(EXIT_FAILURE);
             if (pid1 == 0) // child1
             {
                 dup2(fds[READ_END], fileno(stdin));
@@ -528,7 +522,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
 
                 if (pid2 == -1)
                     perror("Error forking at child2");
-                exit(EXIT_FAILURE);
                 if (pid2 == 0) // child2
                 {
                     dup2(fds[READ_END], fileno(stdin));
@@ -544,8 +537,7 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                     pid_t pid3 = fork();
                     if (pid3 == -1)
                         perror("Error forking at child3");
-                    exit(EXIT_FAILURE);
-                    if (pid3 == 0) // child3 executes pwd
+                    if (pid3 == 0) // child3
                     {
                         close(fds[READ_END]);
                         close(fds[WRITE_END]);
@@ -558,8 +550,7 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                         pid_t pid4 = fork();
                         if (pid4 == -1)
                             perror("Error forking at child4");
-                        exit(EXIT_FAILURE);
-                        if (pid4 == 0) // child4 executes pwd
+                        if (pid4 == 0) // child4
                         {
                             dup2(fds[WRITE_END], fileno(stdout));
                             // anything below here will write to fileno(stdout)
