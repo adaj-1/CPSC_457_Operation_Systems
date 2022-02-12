@@ -133,7 +133,7 @@ void format_input(vector<vector<string>> *input, vector<vector<char *>> *argv, v
     }
 
     // error checking
-    if (argv->back().front() == nullptr)
+    if (argv->back().front() == nullptr) // check for missing command
     {
         perror("Missing command");
         exit(EXIT_FAILURE);
@@ -486,7 +486,6 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
         }
         else if (argv->at(0).size() == 3 && argv->at(1).size() == 3) // cmd1 cmd2 $ cmd3 cmd4
         {
-            cout << "testing" << endl;
             int fds[2];
             pipe(fds);
 
@@ -539,6 +538,7 @@ int multi_system_command(vector<vector<char *>> *argv, vector<cmds> *redirection
                         perror("Error forking at child3");
                     if (pid3 == 0) // child3
                     {
+                        dup2(fds[WRITE_END], fileno(stdout));
                         close(fds[READ_END]);
                         close(fds[WRITE_END]);
                         status = execvp(input2.at(0), input2.data());
@@ -614,8 +614,20 @@ int main()
             }
             else
             {
-                multi_cmd(&parsed_args, &redirection_indices, &inputs, &redirections);     // sort commands and arguments
-                format_input(&inputs, &argv, &redirections);                               // reformat input for execvp execution and error checking
+                multi_cmd(&parsed_args, &redirection_indices, &inputs, &redirections); // sort commands and arguments
+                format_input(&inputs, &argv, &redirections);                           // reformat input for execvp execution and error checking
+
+                /*
+                for (auto it = redirections.begin(); it != redirections.end(); it++)
+                {
+                    char * temp = argv.at(it - redirections.begin()).front();
+                    if (*it == is_output)
+                    {
+                        if (temp == "file.txt")
+                            perror("testing");
+                    }
+                }
+                */
                 status = multi_system_command(&argv, &redirections, &redirection_indices); // execute commands
             }
         }
