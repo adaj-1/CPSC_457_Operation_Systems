@@ -111,22 +111,28 @@ void multi_cmd(vector<string> *parsed_args, vector<int> *redirection_indices, ve
 
     // error checking if first command ends in .txt when using output redirection
     // Citation: https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
+    bool is_file = false;
+    string cmd = "";
+    string file_end = ".txt";
+
     if (redirections->front() == is_output)
     {
-        string cmd1 = parsed_args->front();
-        string file_end = ".txt";
-
-        bool is_file;
-        if (cmd1.compare(cmd1.length() - file_end.length(), file_end.length(), file_end) == 0)
+        cmd = input->front().front(); // xxx < cmd, check if cmd is a file name,
+    }
+    if (redirections->front() == is_pipe)
+    {
+        cmd = input->at(1).front(); // xxx | cmd, check if cmd is a file name
+    }
+    if (cmd.length() >= file_end.length())
+    {
+        if (cmd.compare(cmd.length() - file_end.length(), file_end.length(), file_end) == 0)
             is_file = true;
-        else
-            is_file = false;
+    }
 
-        if (is_file == true)
-        {
-            perror("Error: No command found ending in '.txt'\n");
-            exit(EXIT_FAILURE);
-        }
+    if (is_file == true)
+    {
+        perror("Error: No command found ending in '.txt'\n");
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -637,7 +643,6 @@ int main()
         if (status == 0)
         {
             check_input(&parsed_args, &redirection_indices);
-            // cout << "num of redirections: " << redirection_indices.size() << endl;
             if (redirection_indices.size() == 0) // no io_redirection called
             {
                 status = system_call(&parsed_args);
