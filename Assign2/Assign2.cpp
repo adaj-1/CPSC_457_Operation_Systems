@@ -74,17 +74,6 @@ void nv_proceess(int *nv_tray, int *nv_tray_in, int *nv_tray_out, sem_t *nv_mute
             sleep(10 + rand() % 6); // 10<= sleep <= 15 seconds
         }
     }
-    // Main process
-    else
-    {
-        while (1)
-        {
-            int takenSlots;
-            sem_getvalue(nv_full, &takenSlots);
-            printf("Items in the non-vegan tray %d/%d\n", takenSlots, MAX_BUFFER_SIZE);
-            sleep(10); // TODO check if this is the correct sleep time
-        }
-    }
 }
 
 void v_proceess(int *v_tray, int *v_tray_in, int *v_tray_out, sem_t *v_mutex, sem_t *v_empty, sem_t *v_full, pid_t v_chef, pid_t v_cust, int pid2)
@@ -150,17 +139,6 @@ void v_proceess(int *v_tray, int *v_tray_in, int *v_tray_out, sem_t *v_mutex, se
             sleep(10 + rand() % 6); // 10<= sleep <= 15 seconds
         }
     }
-    // Main process
-    else
-    {
-        while (1)
-        {
-            int takenSlots;
-            sem_getvalue(v_full, &takenSlots);
-            printf("Items in the vegan tray %d/%d\n", takenSlots, MAX_BUFFER_SIZE);
-            sleep(10); // TODO check if this is the correct sleep time
-        }
-    }
 }
 
 int main()
@@ -207,7 +185,6 @@ int main()
     pid_t hybrid_cust; // C3, one of each dishes
 
     pid_t pid1 = fork();
-
     if (pid1 == -1)
         perror("Error forking at child1\n");
     if (pid1 == 0) // child1
@@ -222,7 +199,7 @@ int main()
                 sem_wait(v_mutex);  // lock
 
                 time_t t;
-                srand((unsigned)time(&t));
+                srand((unsigned)time(&t) % getpid());
                 // next consumed item
                 int nv_next_consumed = nv_tray[*nv_tray_out];
                 int v_next_consumed = v_tray[*v_tray_out];
@@ -245,7 +222,7 @@ int main()
                 }
                 else
                 {
-                    printf("Missing item!!!!!!!!!!!!!!!!!!!");
+                    printf("Missing item!!!!!!!!!!!!!!!!!!!"); // TODO remove this
                 }
 
                 *nv_tray_out = (*nv_tray_out + 1) % MAX_BUFFER_SIZE;
@@ -257,6 +234,20 @@ int main()
                 sem_post(v_empty);
 
                 sleep(10 + rand() % 6); // 10<= sleep <= 15 seconds
+            }
+        }
+        else
+        {
+            while (1)
+            {
+                int nv_takenSlots;
+                sem_getvalue(nv_full, &nv_takenSlots);
+                int v_takenSlots;
+                sem_getvalue(v_full, &v_takenSlots);
+                printf("\n");
+                printf("Items in the non-vegan tray %d/%d, Items in the vegan tray %d/%d", nv_takenSlots, MAX_BUFFER_SIZE, v_takenSlots, MAX_BUFFER_SIZE);
+                printf("\n");
+                sleep(10); // TODO check if this is the correct sleep time
             }
         }
     }
