@@ -8,18 +8,20 @@
 
 #define MAX_BUFFER_SIZE 10 // tray size
 
-char *nv_tray;
-char *v_tray;
+char* nv_tray;
+char* v_tray;
 
-char dish1 = 49;
-char dish2 = 50;
+char DISH1 = 49;    // 1    Fettuccine Chicken Alfredo Non-Vegan Buffer or Pistachio Pesto Pasta Vegan Buffer
+char DISH2 = 50;    // 2    Garlic Sirloin Steak Non-Vegan Buffer or Avocado Fruit Salad Vegan Buffer
 
+//semaphores for non-vegan producer consumer
 // This is going to act as a binary semaphore
 sem_t nv_mutex;
 // These are going to act as counting semaphores
 sem_t nv_full;
 sem_t nv_empty;
 
+//semaphores for vegan producer consumer
 // This is going to act as a binary semaphore
 sem_t v_mutex;
 // These are going to act as counting semaphores
@@ -33,6 +35,7 @@ void *nv_cust(void *arg);
 void *v_cust(void *arg);
 void *hybrid_cust(void *arg);
 
+// in and out pointers for both non-vegan and vegan trays
 int nv_tray_in = 0;
 int nv_tray_out = 0;
 int v_tray_in = 0;
@@ -51,6 +54,7 @@ int main()
         v_tray[i] = 48;
     }
 
+    //initialize semaphores
     sem_init(&nv_mutex, 0, 1);
     sem_init(&nv_empty, 0, MAX_BUFFER_SIZE);
     sem_init(&nv_full, 0, 0);
@@ -58,8 +62,9 @@ int main()
     sem_init(&v_empty, 0, MAX_BUFFER_SIZE);
     sem_init(&v_full, 0, 0);
 
-    pthread_t nv_process_id, v_process_id, nv_cust_id, v_cust_id, hybrid_cust_id, items_in_tray_id;
+    pthread_t nv_process_id, v_process_id, nv_cust_id, v_cust_id, hybrid_cust_id, items_in_tray_id; // create thread ids
 
+    //create all threads
     int result = pthread_create(&items_in_tray_id, NULL, items_in_tray, NULL);
     if (result != 0)
     {
@@ -90,7 +95,8 @@ int main()
     {
         printf("Error creating hybrid_cust thread\n");
     }
-
+    
+    //join all threads
     pthread_join(items_in_tray_id, NULL);
     pthread_join(nv_process_id, NULL);
     pthread_join(v_process_id, NULL);
@@ -98,6 +104,7 @@ int main()
     pthread_join(v_cust_id, NULL);
     pthread_join(hybrid_cust_id, NULL);
 
+    //free memory
     free(nv_tray);
     free(v_tray);
 
@@ -108,28 +115,27 @@ void *items_in_tray(void *arg)
 {
     while (1)
     {
-        sleep(10);
+        sleep(10); // sleep before updating tray status
         int nv_takenSlots;
-        sem_getvalue(&nv_full, &nv_takenSlots);
         int v_takenSlots;
-        sem_getvalue(&v_full, &v_takenSlots);
+
+        sem_getvalue(&nv_full, &nv_takenSlots); // checking how full non-vegan tray is
+        sem_getvalue(&v_full, &v_takenSlots);   // checking how full non-vegan tray is
+
         printf("\n");
         printf("Items in the non-vegan tray %d/%d, Items in the vegan tray %d/%d", nv_takenSlots, MAX_BUFFER_SIZE, v_takenSlots, MAX_BUFFER_SIZE);
         printf("\n");
+       
     }
-    return NULL;
+    return NULL;    // exit thread
 }
 
 void *nv_process(void *arg)
 {
-    srand((unsigned)time(NULL) % gettid());
+    srand((unsigned)time(NULL) % gettid()); // seeding randomness
     while (1)
     {
-
-        // next produced item
-        // time_t t;
-        // srand((unsigned)time(&t) % getpid());      //TODO FIX RANDOM
-        int next_produced = 1 + rand() % 2;
+        int next_produced = 1 + rand() % 2;     // randomly select which entree to add to tray
 
         sem_wait(&nv_empty); // empty is the amount of empty slots in the semiphore, wait until empty is not 0
         sem_wait(&nv_mutex); // lock
@@ -137,33 +143,30 @@ void *nv_process(void *arg)
         // CRITICAL SECTION, (ADD TO BUFFER)
         if (next_produced == 1)
         {
-            nv_tray[nv_tray_in] = dish1;
+            nv_tray[nv_tray_in] = DISH1;
             printf("Donatello creates non-vegan dish: Fettuccine Chicken Alfredo\n");
         }
         else if (next_produced == 2)
         {
-            nv_tray[nv_tray_in] = dish2;
+            nv_tray[nv_tray_in] = DISH2;
             printf("Donatello creates non-vegan dish: Garlic Sirloin Steak\n");
         }
 
-        nv_tray_in = (nv_tray_in + 1) % MAX_BUFFER_SIZE;
+        nv_tray_in = (nv_tray_in + 1) % MAX_BUFFER_SIZE; // updating in pointer
 
         sem_post(&nv_mutex); // unlock
         sem_post(&nv_full);
 
         sleep(1 + rand() % 5); // 1<= sleep <= 5 seconds    this makes it runs faster than consumer
     }
-    return NULL;
+    return NULL; // exit thread
 }
 void *v_process(void *arg)
 {
-    srand((unsigned)time(NULL) % gettid());
+    srand((unsigned)time(NULL) % gettid()); // seeding randomness
     while (1)
     {
-
-        // time_t t;
-        // srand((unsigned)time(&t) % getpid());       // TODO Fix random
-        int next_produced = 1 + rand() % 2;
+        int next_produced = 1 + rand() % 2; // randomly seelct which entree to add to tray
 
         sem_wait(&v_empty); // empty is the amount of empty slots in the semiphore, wait until empty is not 0
         sem_wait(&v_mutex); // lock
@@ -171,35 +174,34 @@ void *v_process(void *arg)
         // CRITICAL SECTION, (ADD TO BUFFER)
         if (next_produced == 1)
         {
-            v_tray[v_tray_in] = dish1;
+            v_tray[v_tray_in] = DISH1;
             printf("Portecelli creates vegan dish: Pistachio Pesto Pasta\n");
         }
         else if (next_produced == 2)
         {
-            v_tray[v_tray_in] = dish2;
+            v_tray[v_tray_in] = DISH2;
             printf("Portecelli creates vegan dish: Avocado Fruit Salad\n");
         }
 
-        v_tray_in = (v_tray_in + 1) % MAX_BUFFER_SIZE;
+        v_tray_in = (v_tray_in + 1) % MAX_BUFFER_SIZE;    // updating in pointer
 
         sem_post(&v_mutex); // unlock
         sem_post(&v_full);
 
         sleep(1 + rand() % 5); // 1<= sleep <= 5 seconds    this makes it runs faster than consumer
     }
-    return NULL;
+    return NULL; // exit thread
 }
 void *nv_cust(void *arg)
 {
-    srand((unsigned)time(NULL) % gettid());
+    srand((unsigned)time(NULL) % gettid()); // seeding randomness
     while (1)
     {
-
         sem_wait(&nv_full);
         sem_wait(&nv_mutex); // lock
 
         // next consumed item
-        int next_consumed = nv_tray[nv_tray_out];
+        int next_consumed = nv_tray[nv_tray_out];   // get next consumed item
 
         // CRITICAL SECTION (TAKE FROM BUFFER)
         if (next_consumed == 49)
@@ -211,25 +213,24 @@ void *nv_cust(void *arg)
             printf("Non-vegan customer removes non-vegan dish: Garlic Sirloin Steak\n");
         }
 
-        nv_tray_out = (nv_tray_out + 1) % MAX_BUFFER_SIZE;
+        nv_tray_out = (nv_tray_out + 1) % MAX_BUFFER_SIZE;  // updating out pointer
 
         sem_post(&nv_mutex); // unlock
         sem_post(&nv_empty);
 
         sleep(10 + rand() % 6); // 10<= sleep <= 15 seconds
     }
-    return NULL;
+    return NULL; // exit thread
 }
 void *v_cust(void *arg)
 {
-    srand((unsigned)time(NULL) % gettid());
+    srand((unsigned)time(NULL) % gettid()); // seeding randomness
     while (1)
     {
         sem_wait(&v_full);
         sem_wait(&v_mutex); // lock
 
-        // next consumed item
-        int next_consumed = v_tray[v_tray_out];
+        int next_consumed = v_tray[v_tray_out]; // next consumed item
 
         // CRITICAL SECTION (TAKE FROM BUFFER)
         if (next_consumed == 49)
@@ -241,28 +242,27 @@ void *v_cust(void *arg)
             printf("Vegan customer removes vegan dish: Avocado Fruit Salad\n");
         }
 
-        v_tray_out = (v_tray_out + 1) % MAX_BUFFER_SIZE;
+        v_tray_out = (v_tray_out + 1) % MAX_BUFFER_SIZE;    // updating out pointer
 
         sem_post(&v_mutex); // unlock
         sem_post(&v_empty);
 
         sleep(10 + rand() % 6); // 10<= sleep <= 15 seconds
     }
-    return NULL;
+    return NULL; // exit thread
 }
 void *hybrid_cust(void *arg)
 {
-    srand((unsigned)time(NULL) % gettid()); // TODO fix random
+    srand((unsigned)time(NULL) % gettid()); // seeding randomness
     while (1)
     {
         sem_wait(&nv_full);
         sem_wait(&v_full);
         sem_wait(&nv_mutex); // lock
         sem_wait(&v_mutex);  // lock
-
-        // next consumed item
-        int nv_next_consumed = nv_tray[nv_tray_out];
-        int v_next_consumed = v_tray[v_tray_out];
+        
+        int nv_next_consumed = nv_tray[nv_tray_out]; // next consumed item in non-vegan tray
+        int v_next_consumed = v_tray[v_tray_out];    // next consumed item in vegan tray
 
         if (nv_next_consumed == 49 && v_next_consumed == 49)
         {
@@ -280,13 +280,9 @@ void *hybrid_cust(void *arg)
         {
             printf("Hybrid customer removes non-vegan dish: Garlic Sirloin Steak, and vegan dish: Pistachio Pesto Pasta\n");
         }
-        else
-        {
-            printf("Missing item!!!!!!!!!!!!!!!!!!!"); // TODO remove this
-        }
 
-        nv_tray_out = (nv_tray_out + 1) % MAX_BUFFER_SIZE;
-        v_tray_out = (v_tray_out + 1) % MAX_BUFFER_SIZE;
+        nv_tray_out = (nv_tray_out + 1) % MAX_BUFFER_SIZE; // update out pointer in non-vegan tray
+        v_tray_out = (v_tray_out + 1) % MAX_BUFFER_SIZE;   // update out pointer in vegan tray
 
         sem_post(&nv_mutex); // unlock
         sem_post(&v_mutex);  // unlock
@@ -295,5 +291,5 @@ void *hybrid_cust(void *arg)
 
         sleep(10 + rand() % 6); // 10<= sleep <= 15 seconds
     }
-    return NULL;
+    return NULL; // exit thread
 }
