@@ -10,8 +10,8 @@ using namespace std;
 using namespace std;
 
 // num_of_elem in vector must be more than 100
-#define NUM_ELEM 10
-#define ELEM_MAX 10
+#define NUM_ELEM 100000000
+#define ELEM_MAX 100
 
 // user specified
 int num_threads;
@@ -33,12 +33,14 @@ struct Composite
 
         for (int i = 0; i < NUM_ELEM; i++)
         {
-            rand_num = (rand() % ELEM_MAX);
+            rand_num = rand() % ELEM_MAX;
             elems.push_back(rand_num);
-            cout << elems.at(i) << endl;
         }
+
+        locals.resize(num_threads);
     }
 
+    //---Citation: composite_number.cpp posted on d2l along with assignment---
     bool isComposite(int &n)
     {
         // Corner cases
@@ -50,35 +52,43 @@ struct Composite
         // This is checked so that we can skip
         // middle five numbers in below loop
         if (n % 2 == 0 || n % 3 == 0)
-            num_of_composite++;
-        return true;
+            return true;
 
         for (int i = 5; i * i <= n; i = i + 6)
             if (n % i == 0 || n % (i + 2) == 0)
-                num_of_composite++;
-        return true;
+                return true;
         return false;
     }
+    //---end of citation---
 };
+
+struct Composite comp;
 
 void *test_func(void *arg)
 {
+    //---Citation: Amir Week 7 Histogram-Solution Tutorial---
     int index = *(int *)arg;
-    int range = NUM_ELEM / num_threads;
-    cout << "index: " << index << endl;
-    int lower = index * range;
-    cout << "lower: " << lower << endl;
-    int upper = min((index + 1) * range, NUM_ELEM);
-    cout << "upper: " << upper << endl;
+    int lower = index * (NUM_ELEM / num_threads);
+    int upper = min((index + 1) * (NUM_ELEM / num_threads), NUM_ELEM);
+    //---end of citation---
 
+    // evenly splitting elems to be checked for each thread
     for (int i = lower; i < upper; i++)
     {
-        locals[index].push_back(elems.at(i));
+        locals[index].push_back(elems[i]);
     }
+
+    // begin checking for composites within each thread
+    for (auto it = locals[index].begin(); it != locals[index].end(); it++)
+    {
+        if (comp.isComposite(*it))
+        {
+            num_of_composite++;
+        }
+    }
+
     pthread_exit(0);
 }
-
-struct Composite comp;
 
 int main(int argc, char *argv[])
 {
@@ -87,7 +97,6 @@ int main(int argc, char *argv[])
     if (argc > 1)
     {
         num_threads = atoi(argv[1]);
-        cout << "user thread input: " << num_threads << endl;
 
         if (isdigit(num_threads) == 1)
         {
@@ -124,20 +133,14 @@ int main(int argc, char *argv[])
     for (int i = 0; i < num_threads; i++)
     {
         pthread_join(tids[i], NULL);
-        cout << tids[i] << endl;
     }
 
+    float percent = (num_of_composite / NUM_ELEM);
+
+    cout << "n = " << num_threads << endl;
+    cout << "num_of_elems: " << NUM_ELEM << endl;
+    cout << "num_of_composite:" << num_of_composite << endl;
+    cout << percent << " composite" << endl;
+
     return 0;
-
-    // waiter.init();
-
-    // pthread_t philosopher_1;
-
-    // int id1 = 1;
-
-    // pthread_create(&philosopher_1, NULL, thread_function, (void *)&id1);
-
-    // pthread_join(philosopher_1, NULL);
-
-    // waiter.destroy();
 }
