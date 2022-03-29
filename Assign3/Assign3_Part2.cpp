@@ -2,15 +2,16 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
-#include <thread>
+#include <pthread.h>
 #include <mutex>
 #include <iostream>
 #include <vector>
+#include <mutex>
 using namespace std;
 using namespace std;
 
 // num_of_elem in vector must be more than 100
-#define NUM_ELEM 100000000
+#define NUM_ELEM 10000000
 #define ELEM_MAX 100
 
 // user specified
@@ -22,6 +23,8 @@ int num_of_composite = 0;
 vector<int> elems;
 vector<vector<int>> locals;
 vector<pthread_t> tids;
+
+pthread_mutex_t mutex1;
 
 struct Composite
 {
@@ -57,14 +60,15 @@ struct Composite
         for (int i = 5; i * i <= n; i = i + 6)
             if (n % i == 0 || n % (i + 2) == 0)
                 return true;
-        return false;
+        return false;     
     }
     //---end of citation---
+        
 };
 
 struct Composite comp;
 
-void *test_func(void *arg)
+void* test_func(void * arg)
 {
     //---Citation: Amir Week 7 Histogram-Solution Tutorial---
     int index = *(int *)arg;
@@ -79,31 +83,33 @@ void *test_func(void *arg)
     }
 
     // begin checking for composites within each thread
-    for (auto it = locals[index].begin(); it != locals[index].end(); it++)
+    for(auto it = locals[index].begin(); it != locals[index].end(); it ++)
     {
         if (comp.isComposite(*it))
         {
+            pthread_mutex_lock(&mutex1);
             num_of_composite++;
-        }
+            pthread_mutex_unlock(&mutex1);
+        }   
     }
-
     pthread_exit(0);
 }
 
 int main(int argc, char *argv[])
 {
     bool validInput = false;
+    
 
     if (argc > 1)
     {
         num_threads = atoi(argv[1]);
-
+        
         if (isdigit(num_threads) == 1)
         {
             validInput = true;
         }
     }
-    // TODO error checking
+    //TODO error checking
     /*
     while (!validInput)
     {
@@ -121,6 +127,8 @@ int main(int argc, char *argv[])
 
     comp.init();
 
+    pthread_mutex_init(&mutex1,NULL);
+
     for (int i = 0; i < num_threads; i++)
     {
         pthread_t tid;
@@ -134,13 +142,15 @@ int main(int argc, char *argv[])
     {
         pthread_join(tids[i], NULL);
     }
+    pthread_mutex_destroy(&mutex1);
 
-    float percent = (num_of_composite / NUM_ELEM);
+    float percent = num_of_composite * 100 / NUM_ELEM;
 
     cout << "n = " << num_threads << endl;
     cout << "num_of_elems: " << NUM_ELEM << endl;
     cout << "num_of_composite:" << num_of_composite << endl;
-    cout << percent << " composite" << endl;
+    cout << percent << "% composite" << endl;
+
 
     return 0;
 }
