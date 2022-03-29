@@ -12,7 +12,7 @@ using namespace std;
 
 // num_of_elem in vector must be more than 100
 #define NUM_ELEM 10000000
-#define ELEM_MAX 100
+#define ELEM_MAX 1000
 
 // user specified
 int num_threads;
@@ -75,6 +75,8 @@ void* test_func(void * arg)
     int lower = index * (NUM_ELEM / num_threads);
     int upper = min((index + 1) * (NUM_ELEM / num_threads), NUM_ELEM);
     //---end of citation---
+    
+    int local_num_of_composite = 0;
 
     // evenly splitting elems to be checked for each thread
     for (int i = lower; i < upper; i++)
@@ -87,11 +89,13 @@ void* test_func(void * arg)
     {
         if (comp.isComposite(*it))
         {
-            pthread_mutex_lock(&mutex1);
-            num_of_composite++;
-            pthread_mutex_unlock(&mutex1);
+            local_num_of_composite++;   
         }   
     }
+
+    pthread_mutex_lock(&mutex1);
+        num_of_composite += local_num_of_composite;
+    pthread_mutex_unlock(&mutex1);
     pthread_exit(0);
 }
 
