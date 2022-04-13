@@ -1,8 +1,8 @@
-all: fifo #roundrobin
+all: fifo roundrobin
 
 fifo: fifo.cpp fifo
 
-	g++ -g -pthread fifo.cpp -o fifo 
+	g++ -g fifo.cpp -o fifo -pthread
 
-#roundrobin: roundrobin.cpp roundrobin
-#	g++ -g roundrobin.cpp -o roundrobin -pthread
+roundrobin: roundrobin.cpp roundrobin
+	g++ -g roundrobin.cpp -o roundrobin -pthread
